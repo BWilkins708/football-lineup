@@ -10,6 +10,10 @@ A phone-first web app for coaches to build line-ups, track matches live from the
 - **Reports and stats**: match report, results record, per-player season stats and match log, sortable season table
 - **Backup**: data lives on the device (IndexedDB); download and restore a JSON backup
 
+## Use it
+
+Open **https://bwilkins708.github.io/football-lineup/** on your phone, then use "Add to Home Screen" (Safari share menu on iPhone, or the browser menu on Android) to install it. Every push to `main` redeploys automatically.
+
 ## Development
 
 ```sh
