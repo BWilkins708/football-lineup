@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db, uid, type EventType, type Match, type MatchEvent, type Player } from '../db';
 import { LineupEditor, Modal, Pitch, PlayerList, shortName } from '../components';
-import { slotsFor } from '../formations';
+import { sizeOf, slotsFor } from '../formations';
 import { elapsed, formatClock, formatMinute, matchPlayerStats, mins, onPitch, score } from '../stats';
 
 export function MatchPage() {
@@ -54,7 +54,7 @@ function MatchSetup({ match, players }: { match: Match; players: Player[] }) {
       <div className="page-head">
         <div>
           <h1>{match.venue === 'Home' ? 'v' : '@'} {match.opponent}</h1>
-          <p className="muted small">{match.date}{match.competition ? ` · ${match.competition}` : ''} · {match.halfLength} min halves</p>
+          <p className="muted small">{match.date}{match.competition ? ` · ${match.competition}` : ''} · {sizeOf(match.lineup.formation)}-a-side · {match.halfLength} min halves</p>
         </div>
       </div>
       {players.length === 0 ? (

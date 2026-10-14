@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Lineup, Player } from './db';
-import { FORMATION_NAMES, slotsFor } from './formations';
+import { FORMATIONS_BY_SIZE, TEAM_SIZES, sizeOf, slotsFor } from './formations';
 
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   useEffect(() => {
@@ -129,6 +129,19 @@ export function changeFormation(lineup: Lineup, formation: string): Lineup {
   return { ...lineup, formation, slots, bench: [...lineup.bench, ...leftovers] };
 }
 
+export function TeamSizePicker({ value, onChange }: { value: number; onChange: (n: (typeof TEAM_SIZES)[number]) => void }) {
+  return (
+    <div className="field">
+      <span>Team size</span>
+      <div className="toggle-group">
+        {TEAM_SIZES.map((n) => (
+          <button type="button" key={n} className={value === n ? 'on' : ''} onClick={() => value !== n && onChange(n)}>{n}-a-side</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function LineupEditor({
   lineup,
   players,
@@ -142,6 +155,7 @@ export function LineupEditor({
   const [benchOpen, setBenchOpen] = useState(false);
   const byId = new Map(players.map((p) => [p.id, p]));
   const layout = slotsFor(lineup.formation);
+  const size = sizeOf(lineup.formation);
   const onField = new Set(Object.values(lineup.slots).filter(Boolean) as string[]);
   const available = players.filter((p) => p.active).sort((a, b) => (a.number ?? 999) - (b.number ?? 999));
 
@@ -198,11 +212,12 @@ export function LineupEditor({
 
   return (
     <div className="lineup-editor">
+      <TeamSizePicker value={size} onChange={(n) => onChange(changeFormation(lineup, FORMATIONS_BY_SIZE[n][0]))} />
       <div className="row wrap">
         <label className="field inline">
           <span>Formation</span>
           <select value={lineup.formation} onChange={(e) => onChange(changeFormation(lineup, e.target.value))}>
-            {FORMATION_NAMES.map((f) => <option key={f}>{f}</option>)}
+            {FORMATIONS_BY_SIZE[size].map((f) => <option key={f}>{f}</option>)}
           </select>
         </label>
         <span className="muted small">{filled}/{layout.length} picked</span>

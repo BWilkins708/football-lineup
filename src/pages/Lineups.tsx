@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db, uid, type LineupTemplate } from '../db';
 import { LineupEditor } from '../components';
+import { sizeOf } from '../formations';
 
 export function LineupsPage() {
   const lineups = useLiveQuery(() => db.lineups.orderBy('updatedAt').reverse().toArray(), []);
@@ -29,7 +30,7 @@ export function LineupsPage() {
           {lineups.map((l) => (
             <li key={l.id}>
               <Link to={`/lineups/${l.id}`} className="card-row">
-                <span className="grow"><b>{l.name}</b><span className="muted small block">{l.formation} · {Object.values(l.slots).filter(Boolean).length} starters · {l.bench.length} subs</span></span>
+                <span className="grow"><b>{l.name}</b><span className="muted small block">{sizeOf(l.formation)}-a-side · {l.formation} · {Object.values(l.slots).filter(Boolean).length} starters · {l.bench.length} subs</span></span>
                 <span className="chev">›</span>
               </Link>
             </li>
