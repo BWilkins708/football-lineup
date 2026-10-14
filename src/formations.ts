@@ -34,8 +34,8 @@ const ELEVEN: Record<string, Slot[]> = {
 
 const LABELS: Record<Position, string[][]> = {
   GK: [],
-  DEF: [[], ['CB'], ['LB', 'RB'], ['LB', 'CB', 'RB']],
-  MID: [[], ['CM'], ['LM', 'RM'], ['LM', 'CM', 'RM']],
+  DEF: [[], ['CB'], ['LB', 'RB'], ['LB', 'CB', 'RB'], ['LB', 'CB', 'CB', 'RB']],
+  MID: [[], ['CM'], ['LM', 'RM'], ['LM', 'CM', 'RM'], ['LM', 'CM', 'CM', 'RM']],
   FWD: [[], ['ST'], ['ST', 'ST'], ['LW', 'ST', 'RW']],
 };
 
@@ -49,18 +49,19 @@ function smallSided(name: string): Slot[] {
     let labels = LABELS[role][n];
     // With two midfield lines, single players are a holding and an attacking midfielder.
     if (role === 'MID' && n === 1 && lines.length > 3) labels = [i === 1 ? 'DM' : 'AM'];
-    slots.push(...row(labels, role, y, n === 2 ? 50 : 64));
+    slots.push(...row(labels, role, y, n === 2 ? 50 : n === 3 ? 64 : 80));
   });
   return slots;
 }
 
-export const TEAM_SIZES = [5, 6, 7, 11] as const;
+export const TEAM_SIZES = [5, 6, 7, 9, 11] as const;
 export type TeamSize = (typeof TEAM_SIZES)[number];
 
 const SMALL: Record<number, string[]> = {
   5: ['1-2-1', '2-2', '2-1-1', '1-1-2', '3-1'],
   6: ['2-1-2', '2-2-1', '3-1-1', '1-3-1', '3-2'],
   7: ['2-3-1', '3-2-1', '3-1-2', '2-1-2-1', '1-3-2', '3-3'],
+  9: ['3-3-2', '3-2-3', '2-4-2', '3-4-1', '4-3-1', '3-1-3-1'],
 };
 
 export const FORMATIONS: Record<string, Slot[]> = {
@@ -73,6 +74,7 @@ export const FORMATIONS_BY_SIZE: Record<TeamSize, string[]> = {
   5: SMALL[5],
   6: SMALL[6],
   7: SMALL[7],
+  9: SMALL[9],
   11: Object.keys(ELEVEN),
 };
 

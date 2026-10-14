@@ -7,7 +7,7 @@ import { FORMATIONS_BY_SIZE, sizeOf, type TeamSize } from '../formations';
 import { score } from '../stats';
 
 /** Typical half length for each team size, used as the default for a new match. */
-const DEFAULT_HALF: Record<TeamSize, number> = { 5: 20, 6: 20, 7: 25, 11: 45 };
+const DEFAULT_HALF: Record<TeamSize, number> = { 5: 20, 6: 20, 7: 25, 9: 30, 11: 45 };
 
 // en-CA formats as yyyy-mm-dd in the device's local time zone.
 const today = () => new Date().toLocaleDateString('en-CA');

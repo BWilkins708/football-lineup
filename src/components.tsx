@@ -132,10 +132,10 @@ export function changeFormation(lineup: Lineup, formation: string): Lineup {
 export function TeamSizePicker({ value, onChange }: { value: number; onChange: (n: (typeof TEAM_SIZES)[number]) => void }) {
   return (
     <div className="field">
-      <span>Team size</span>
+      <span>Team size (players per side)</span>
       <div className="toggle-group">
         {TEAM_SIZES.map((n) => (
-          <button type="button" key={n} className={value === n ? 'on' : ''} onClick={() => value !== n && onChange(n)}>{n}-a-side</button>
+          <button type="button" key={n} aria-label={`${n}-a-side`} className={value === n ? 'on' : ''} onClick={() => value !== n && onChange(n)}>{n}</button>
         ))}
       </div>
     </div>
