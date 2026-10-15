@@ -68,6 +68,7 @@ export function TeamBar() {
 
   return (
     <header className="team-bar">
+      <span className="crest" aria-hidden>{team.name.trim().charAt(0).toUpperCase() || '?'}</span>
       <label className="team-select">
         <span className="sr-only">Team</span>
         <select
@@ -78,7 +79,7 @@ export function TeamBar() {
           <option value={MANAGE}>Add or edit teams…</option>
         </select>
       </label>
-      <button className="btn ghost small-btn" onClick={() => setManaging(true)}>Teams</button>
+      <button className="btn small-btn on-dark" onClick={() => setManaging(true)}>Teams</button>
       {managing && <ManageTeams onSelect={switchTo} onClose={() => setManaging(false)} />}
     </header>
   );
