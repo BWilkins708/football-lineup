@@ -223,3 +223,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .goal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .goal-list li { display: flex; align-items: flex-end; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
 .goal-list .num { padding-bottom: 12px; }
+
+/* Team switcher */
+.team-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 8px; padding: 8px 16px; padding-top: calc(8px + env(safe-area-inset-top)); background: var(--surface); border-bottom: 1px solid var(--border); }
+.team-select { flex: 1; min-width: 0; }
+.team-select select { width: 100%; border: 0; background: transparent; font-size: 1.1rem; font-weight: 700; padding: 8px 0; min-height: 44px; }
+.small-btn { min-height: 40px; padding: 6px 12px; }
+.inline-input { border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 8px; min-height: 40px; font-size: 1rem; }
+.inline-input:focus { border-color: var(--border); background: var(--bg); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.card-list .list-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 6px; }

@@ -4,15 +4,20 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db, uid, type LineupTemplate } from '../db';
 import { LineupEditor } from '../components';
 import { sizeOf } from '../formations';
+import { useTeam } from '../team';
 
 export function LineupsPage() {
-  const lineups = useLiveQuery(() => db.lineups.orderBy('updatedAt').reverse().toArray(), []);
+  const { team } = useTeam();
+  const lineups = useLiveQuery(
+    () => db.lineups.where('teamId').equals(team.id).sortBy('updatedAt').then((l) => l.reverse()),
+    [team.id],
+  );
   const navigate = useNavigate();
   if (!lineups) return null;
 
   const create = async () => {
     const id = uid();
-    await db.lineups.add({ id, name: 'New line-up', formation: '4-4-2', slots: {}, bench: [], updatedAt: Date.now() });
+    await db.lineups.add({ id, teamId: team.id, name: 'New line-up', formation: '4-4-2', slots: {}, bench: [], updatedAt: Date.now() });
     navigate(`/lineups/${id}`);
   };
 
@@ -45,7 +50,8 @@ export function LineupEditPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const saved = useLiveQuery(() => db.lineups.get(id!), [id]);
-  const players = useLiveQuery(() => db.players.toArray(), []);
+  const { team } = useTeam();
+  const players = useLiveQuery(() => db.players.where('teamId').equals(team.id).toArray(), [team.id]);
   const [draft, setDraft] = useState<LineupTemplate | undefined>();
 
   useEffect(() => {

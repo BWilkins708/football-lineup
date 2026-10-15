@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { db, exportData, importData } from '../db';
 import { record, seasonStats } from '../stats';
+import { useTeam } from '../team';
 
 type SortKey = 'goals' | 'assists' | 'total';
 
@@ -13,8 +14,9 @@ const COLUMNS: [SortKey, string][] = [
 ];
 
 export function StatsPage() {
-  const players = useLiveQuery(() => db.players.toArray(), []);
-  const results = useLiveQuery(() => db.results.toArray(), []);
+  const { team } = useTeam();
+  const players = useLiveQuery(() => db.players.where('teamId').equals(team.id).toArray(), [team.id]);
+  const results = useLiveQuery(() => db.results.where('teamId').equals(team.id).toArray(), [team.id]);
   const [sort, setSort] = useState<SortKey>('goals');
   if (!players || !results) return null;
 
@@ -37,6 +39,7 @@ export function StatsPage() {
   return (
     <div className="page">
       <h1>Season stats</h1>
+      <p className="muted small">{team.name}</p>
       <div className="tiles">
         <div className="tile wide">
           <span>Record</span>
@@ -84,6 +87,7 @@ export function StatsPage() {
 
 function Backup() {
   const file = useRef<HTMLInputElement>(null);
+  const { selectTeam } = useTeam();
 
   const download = async () => {
     const data = await exportData();
@@ -96,9 +100,9 @@ function Backup() {
   };
 
   const restore = async (f: File) => {
-    if (!confirm('Restoring replaces all players, line-ups and results on this device. Continue?')) return;
+    if (!confirm('Restoring replaces all teams, players, line-ups and results on this device. Continue?')) return;
     try {
-      await importData(JSON.parse(await f.text()));
+      selectTeam(await importData(JSON.parse(await f.text())));
       alert('Backup restored.');
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Could not read that file.');
@@ -108,7 +112,7 @@ function Backup() {
   return (
     <section className="backup">
       <h3>Backup</h3>
-      <p className="muted small">Your data is stored on this device only. Download a backup to keep it safe or move it to another device.</p>
+      <p className="muted small">Your data is stored on this device only. A backup includes all your teams; download one to keep it safe or move it to another device.</p>
       <div className="row gap">
         <button className="btn" onClick={download}>Download backup</button>
         <button className="btn ghost" onClick={() => file.current?.click()}>Restore</button>

@@ -3,12 +3,14 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db, uid, type Foot, type Player, type Position } from '../db';
 import { Modal } from '../components';
+import { useTeam } from '../team';
 import { outcome, seasonStats } from '../stats';
 
 const POSITIONS: Position[] = ['GK', 'DEF', 'MID', 'FWD'];
 
 export function SquadPage() {
-  const players = useLiveQuery(() => db.players.toArray(), []);
+  const { team } = useTeam();
+  const players = useLiveQuery(() => db.players.where('teamId').equals(team.id).toArray(), [team.id]);
   const [editing, setEditing] = useState<Player | 'new' | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   if (!players) return null;
@@ -64,6 +66,7 @@ export function SquadPage() {
 }
 
 export function PlayerForm({ player, onClose }: { player?: Player; onClose: () => void }) {
+  const { team } = useTeam();
   const [name, setName] = useState(player?.name ?? '');
   const [number, setNumber] = useState(player?.number?.toString() ?? '');
   const [positions, setPositions] = useState<Position[]>(player?.positions ?? []);
@@ -78,6 +81,7 @@ export function PlayerForm({ player, onClose }: { player?: Player; onClose: () =
     if (!valid) return;
     const data: Player = {
       id: player?.id ?? uid(),
+      teamId: player?.teamId ?? team.id,
       name: name.trim(),
       number: number ? Number(number) : undefined,
       positions,
@@ -138,7 +142,11 @@ export function PlayerPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const player = useLiveQuery(() => db.players.get(id!), [id]);
-  const results = useLiveQuery(() => db.results.orderBy('date').reverse().toArray(), []);
+  const { team } = useTeam();
+  const results = useLiveQuery(
+    () => db.results.where('teamId').equals(team.id).sortBy('date').then((r) => r.reverse()),
+    [team.id],
+  );
   const [editing, setEditing] = useState(false);
   if (player === undefined || !results) return null;
   if (!player) return <div className="page"><p>Player not found.</p></div>;

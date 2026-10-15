@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db, uid, type Goal, type Player, type Result } from '../db';
 import { outcome, record, scorerSummary } from '../stats';
+import { useTeam } from '../team';
 
 // en-CA formats as yyyy-mm-dd in the device's local time zone.
 const today = () => new Date().toLocaleDateString('en-CA');
@@ -11,8 +12,12 @@ const formatDate = (d: string) =>
   new Date(d + 'T12:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 
 export function MatchesPage() {
-  const results = useLiveQuery(() => db.results.orderBy('date').reverse().toArray(), []);
-  const players = useLiveQuery(() => db.players.toArray(), []);
+  const { team } = useTeam();
+  const results = useLiveQuery(
+    () => db.results.where('teamId').equals(team.id).sortBy('date').then((r) => r.reverse()),
+    [team.id],
+  );
+  const players = useLiveQuery(() => db.players.where('teamId').equals(team.id).toArray(), [team.id]);
   if (!results || !players) return null;
   const byId = new Map(players.map((p) => [p.id, p]));
   const rec = record(results);
@@ -81,17 +86,18 @@ function ResultForm({ id }: { id: string }) {
   const navigate = useNavigate();
   // null once loaded when there is no saved result; undefined while loading.
   const existing = useLiveQuery(async () => (isNew ? null : (await db.results.get(id)) ?? null), [id, isNew]);
-  const players = useLiveQuery(() => db.players.toArray(), []);
+  const { team } = useTeam();
+  const players = useLiveQuery(() => db.players.where('teamId').equals(team.id).toArray(), [team.id]);
   const [draft, setDraft] = useState<Result | undefined>();
 
   useEffect(() => {
     if (draft) return;
     if (isNew) {
-      setDraft({ id: uid(), opponent: '', date: today(), venue: 'Home', goalsFor: 0, goalsAgainst: 0, goals: [], createdAt: Date.now() });
+      setDraft({ id: uid(), teamId: team.id, opponent: '', date: today(), venue: 'Home', goalsFor: 0, goalsAgainst: 0, goals: [], createdAt: Date.now() });
     } else if (existing) {
       setDraft(existing);
     }
-  }, [isNew, existing, draft]);
+  }, [isNew, existing, draft, team.id]);
 
   if (!players || (!isNew && existing === undefined)) return null;
   if (!isNew && !existing) return <div className="page"><p>Result not found.</p></div>;
