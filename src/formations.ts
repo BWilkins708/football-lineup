@@ -34,22 +34,30 @@ const ELEVEN: Record<string, Slot[]> = {
 
 const LABELS: Record<Position, string[][]> = {
   GK: [],
-  DEF: [[], ['CB'], ['LB', 'RB'], ['LB', 'CB', 'RB'], ['LB', 'CB', 'CB', 'RB']],
-  MID: [[], ['CM'], ['LM', 'RM'], ['LM', 'CM', 'RM'], ['LM', 'CM', 'CM', 'RM']],
-  FWD: [[], ['ST'], ['ST', 'ST'], ['LW', 'ST', 'RW']],
+  DEF: [[], ['CB'], ['LB', 'RB'], ['LB', 'CB', 'RB'], ['LB', 'CB', 'CB', 'RB'], ['LWB', 'CB', 'CB', 'CB', 'RWB']],
+  MID: [[], ['CM'], ['LM', 'RM'], ['LM', 'CM', 'RM'], ['LM', 'CM', 'CM', 'RM'], ['LM', 'CM', 'CM', 'CM', 'RM'], ['LM', 'CM', 'CM', 'CM', 'CM', 'RM']],
+  FWD: [[], ['ST'], ['ST', 'ST'], ['LW', 'ST', 'RW'], ['LW', 'ST', 'ST', 'RW'], ['LW', 'ST', 'ST', 'ST', 'RW']],
 };
 
-/** Builds a small-sided formation from its name, e.g. "2-3-1": defenders, midfield lines, forwards. */
-function smallSided(name: string): Slot[] {
+/** Labels for midfield lines when there is more than one, from deepest to most advanced. */
+const DEEP_MID = [[], ['DM'], ['DM', 'DM'], ['DM', 'DM', 'DM']];
+const ATTACKING_MID = [[], ['AM'], ['LAM', 'RAM'], ['LAM', 'CAM', 'RAM'], ['LAM', 'AM', 'AM', 'RAM']];
+
+/** Builds the layout for any formation from its name, e.g. "4-1-2-1-2": defenders, midfield lines, forwards. */
+function build(name: string): Slot[] {
   const lines = name.split('-').map(Number);
   const slots = [GK];
+  const midLines = lines.length - 2;
   lines.forEach((n, i) => {
     const role: Position = i === 0 ? 'DEF' : i === lines.length - 1 ? 'FWD' : 'MID';
-    const y = 24 + ((76 - 24) / (lines.length - 1)) * i;
-    let labels = LABELS[role][n];
-    // With two midfield lines, single players are a holding and an attacking midfielder.
-    if (role === 'MID' && n === 1 && lines.length > 3) labels = [i === 1 ? 'DM' : 'AM'];
-    slots.push(...row(labels, role, y, n === 2 ? 50 : n === 3 ? 64 : 80));
+    const y = 24 + ((78 - 24) / (lines.length - 1)) * i;
+    let labels = LABELS[role][n] ?? Array(n).fill(role);
+    if (role === 'MID' && midLines > 1) {
+      if (i === 1 && DEEP_MID[n]) labels = DEEP_MID[n];
+      else if (i === lines.length - 2 && ATTACKING_MID[n]) labels = ATTACKING_MID[n];
+    }
+    const spread = n === 2 ? (role === 'FWD' ? 30 : 50) : n === 3 ? 64 : n === 4 ? 80 : 88;
+    slots.push(...row(labels, role, y, spread));
   });
   return slots;
 }
@@ -57,27 +65,41 @@ function smallSided(name: string): Slot[] {
 export const TEAM_SIZES = [5, 6, 7, 9, 11] as const;
 export type TeamSize = (typeof TEAM_SIZES)[number];
 
-const SMALL: Record<number, string[]> = {
-  5: ['1-2-1', '2-2', '2-1-1', '1-1-2', '3-1'],
-  6: ['2-1-2', '2-2-1', '3-1-1', '1-3-1', '3-2'],
-  7: ['2-3-1', '3-2-1', '3-1-2', '2-1-2-1', '1-3-2', '3-3'],
-  9: ['3-3-2', '3-2-3', '2-4-2', '3-4-1', '4-3-1', '3-1-3-1'],
-};
-
-export const FORMATIONS: Record<string, Slot[]> = {
-  ...Object.fromEntries(Object.values(SMALL).flat().map((f) => [f, smallSided(f)])),
-  ...ELEVEN,
-};
-
-/** Formations for each team size, default first. */
+/** Formations offered for each team size, most common first. */
 export const FORMATIONS_BY_SIZE: Record<TeamSize, string[]> = {
-  5: SMALL[5],
-  6: SMALL[6],
-  7: SMALL[7],
-  9: SMALL[9],
-  11: Object.keys(ELEVEN),
+  5: ['1-2-1', '2-2', '2-1-1', '1-1-2', '3-1', '1-3'],
+  6: ['2-1-2', '2-2-1', '3-1-1', '1-3-1', '3-2', '2-3', '1-2-2', '2-1-1-1', '1-2-1-1'],
+  7: ['2-3-1', '3-2-1', '3-1-2', '2-1-2-1', '1-3-2', '3-3', '2-2-2', '3-1-1-1', '1-2-3', '2-4'],
+  9: ['3-3-2', '3-2-3', '2-4-2', '3-4-1', '4-3-1', '3-1-3-1', '2-3-2-1', '3-2-2-1', '4-2-2', '2-3-3', '3-1-2-2'],
+  11: [
+    '4-4-2', '4-3-3', '4-2-3-1', '4-1-4-1', '4-4-1-1', '4-3-2-1', '4-1-2-1-2', '4-2-2-2', '4-3-1-2', '4-5-1',
+    '4-1-3-2', '4-2-1-3', '4-2-4',
+    '3-5-2', '3-4-3', '3-4-1-2', '3-4-2-1', '3-1-4-2', '3-5-1-1', '3-3-3-1', '3-2-4-1', '3-6-1',
+    '5-3-2', '5-4-1', '5-2-3', '5-2-1-2', '5-3-1-1',
+  ],
 };
 
-export const sizeOf = (formation: string): TeamSize => slotsFor(formation).length as TeamSize;
+/** Players per side for a formation: the outfield lines plus the goalkeeper. */
+export const sizeOf = (formation: string): TeamSize =>
+  (formation.split('-').reduce((sum, n) => sum + Number(n), 0) + 1) as TeamSize;
 
-export const slotsFor = (formation: string) => FORMATIONS[formation] ?? FORMATIONS['4-4-2'];
+/** Checks a typed formation like "4-1-2-1-2" for a team size; returns an error message or undefined. */
+export function validateFormation(formation: string, size: TeamSize): string | undefined {
+  if (!/^[1-6](-[1-6]){1,4}$/.test(formation)) {
+    return 'Use 2 to 5 numbers from 1 to 6 separated by dashes, e.g. 4-1-2-1-2.';
+  }
+  const outfield = size - 1;
+  if (sizeOf(formation) !== size) return `The numbers must add up to ${outfield} outfield players for ${size}-a-side.`;
+  return undefined;
+}
+
+const cache = new Map<string, Slot[]>(Object.entries(ELEVEN));
+
+export const slotsFor = (formation: string) => {
+  let slots = cache.get(formation);
+  if (!slots) {
+    slots = /^[1-6](-[1-6]){1,4}$/.test(formation) ? build(formation) : ELEVEN['4-4-2'];
+    cache.set(formation, slots);
+  }
+  return slots;
+};

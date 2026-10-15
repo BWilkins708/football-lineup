@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { Lineup, Player } from './db';
-import { FORMATIONS_BY_SIZE, TEAM_SIZES, sizeOf, slotsFor } from './formations';
+import { FORMATIONS_BY_SIZE, TEAM_SIZES, sizeOf, slotsFor, validateFormation } from './formations';
 
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   useEffect(() => {
@@ -132,6 +132,8 @@ export function changeFormation(lineup: Lineup, formation: string): Lineup {
   return { ...lineup, formation, slots, bench: [...lineup.bench, ...leftovers] };
 }
 
+const CUSTOM = '__custom__';
+
 export function TeamSizePicker({ value, onChange }: { value: number; onChange: (n: (typeof TEAM_SIZES)[number]) => void }) {
   return (
     <div className="field">
@@ -210,6 +212,21 @@ export function LineupEditor({
     onChange({ ...lineup, slots, bench });
   };
 
+  // A custom formation isn't in the standard list, so show it as an option too.
+  const formationOptions = FORMATIONS_BY_SIZE[size].includes(lineup.formation)
+    ? FORMATIONS_BY_SIZE[size]
+    : [lineup.formation, ...FORMATIONS_BY_SIZE[size]];
+
+  const pickFormation = (value: string) => {
+    if (value !== CUSTOM) return onChange(changeFormation(lineup, value));
+    const typed = prompt(`Type a formation for ${size}-a-side (outfield players only), e.g. ${FORMATIONS_BY_SIZE[size][0]}`);
+    if (!typed) return;
+    const formation = typed.trim().replace(/[\s.,/]+/g, '-');
+    const error = validateFormation(formation, size);
+    if (error) return alert(error);
+    onChange(changeFormation(lineup, formation));
+  };
+
   const filled = onField.size;
   const slotPlayer = slot !== undefined ? lineup.slots[slot] : undefined;
 
@@ -219,8 +236,9 @@ export function LineupEditor({
       <div className="row wrap">
         <label className="field inline">
           <span>Formation</span>
-          <select value={lineup.formation} onChange={(e) => onChange(changeFormation(lineup, e.target.value))}>
-            {FORMATIONS_BY_SIZE[size].map((f) => <option key={f}>{f}</option>)}
+          <select value={lineup.formation} onChange={(e) => pickFormation(e.target.value)}>
+            {formationOptions.map((f) => <option key={f}>{f}</option>)}
+            <option value={CUSTOM}>Custom…</option>
           </select>
         </label>
         <span className="muted small">{filled}/{layout.length} picked</span>
