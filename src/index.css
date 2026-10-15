@@ -212,3 +212,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .sticky-actions { position: sticky; bottom: calc(64px + env(safe-area-inset-bottom)); display: flex; gap: 8px; padding: 10px 0; background: linear-gradient(transparent, var(--bg) 30%); }
 .backup { margin-top: 24px; }
+
+/* Result entry */
+.score-entry { display: flex; align-items: flex-end; justify-content: center; gap: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+.stepper { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.stepper > span { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stepper .btn { width: 44px; padding: 0; font-size: 1.4rem; }
+.stepper-value { font-size: 2.2rem; min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+.score-dash { font-size: 2rem; color: var(--muted); padding-bottom: 6px; }
+.goal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.goal-list li { display: flex; align-items: flex-end; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
+.goal-list .num { padding-bottom: 12px; }

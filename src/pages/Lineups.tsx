@@ -22,7 +22,7 @@ export function LineupsPage() {
         <h1>Line-ups</h1>
         <button className="btn primary" onClick={create}>New line-up</button>
       </div>
-      <p className="muted small">Saved line-ups can be loaded when you set up a match.</p>
+      <p className="muted small">Plan your team and formation for matchday.</p>
       {lineups.length === 0 ? (
         <div className="empty-state"><p>No saved line-ups yet.</p></div>
       ) : (

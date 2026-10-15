@@ -30,57 +30,61 @@ export interface LineupTemplate extends Lineup {
   updatedAt: number;
 }
 
-export type EventType =
-  | 'goal'
-  | 'goal_against'
-  | 'shot'
-  | 'shot_on_target'
-  | 'yellow'
-  | 'red'
-  | 'sub'
-  | 'injury';
-
-export interface MatchEvent {
-  id: string;
-  type: EventType;
-  /** Running match time in seconds when the event happened. */
-  t: number;
-  period: 1 | 2;
-  playerId?: string;
+export interface Goal {
+  /** Missing when the goal was an opponent own goal. */
+  scorerId?: string;
   assistId?: string;
-  /** For subs: the player coming off. */
-  outId?: string;
-  /** For subs: the player coming on. */
-  inId?: string;
   ownGoal?: boolean;
-  penalty?: boolean;
 }
 
-export type MatchStatus = 'setup' | 'first' | 'halftime' | 'second' | 'finished';
-
-export interface Match {
+export interface Result {
   id: string;
   opponent: string;
   date: string; // yyyy-mm-dd
   venue: 'Home' | 'Away';
   competition?: string;
-  halfLength: number; // minutes
-  lineup: Lineup;
-  status: MatchStatus;
-  clock: {
-    running: boolean;
-    startedAt?: number; // epoch ms when the clock last started
-    elapsedBefore: number; // seconds accumulated before startedAt
-    secondHalfStart?: number; // running seconds at 2nd-half kick off
-  };
-  events: MatchEvent[];
+  goalsFor: number;
+  goalsAgainst: number;
+  /** One entry per goal we scored. */
+  goals: Goal[];
   createdAt: number;
+}
+
+/** Shape of matches saved by the earlier live-tracking version, kept so they can be converted. */
+interface LegacyMatch {
+  id: string;
+  opponent: string;
+  date: string;
+  venue: 'Home' | 'Away';
+  competition?: string;
+  status: string;
+  events: { type: string; playerId?: string; assistId?: string; ownGoal?: boolean; t: number }[];
+  createdAt: number;
+}
+
+export function resultFromLegacy(m: LegacyMatch): Result | undefined {
+  if (m.status === 'setup') return undefined;
+  const events = [...m.events].sort((a, b) => a.t - b.t);
+  const goals = events
+    .filter((e) => e.type === 'goal')
+    .map((e) => ({ scorerId: e.ownGoal ? undefined : e.playerId, assistId: e.assistId, ownGoal: e.ownGoal || undefined }));
+  return {
+    id: m.id,
+    opponent: m.opponent,
+    date: m.date,
+    venue: m.venue,
+    competition: m.competition,
+    goalsFor: goals.length,
+    goalsAgainst: events.filter((e) => e.type === 'goal_against').length,
+    goals,
+    createdAt: m.createdAt,
+  };
 }
 
 export const db = new Dexie('soccer-lineup') as Dexie & {
   players: EntityTable<Player, 'id'>;
   lineups: EntityTable<LineupTemplate, 'id'>;
-  matches: EntityTable<Match, 'id'>;
+  results: EntityTable<Result, 'id'>;
 };
 
 db.version(1).stores({
@@ -89,27 +93,38 @@ db.version(1).stores({
   matches: 'id, date, status',
 });
 
+// Version 2 replaces live-tracked matches with simple results.
+db.version(2)
+  .stores({ results: 'id, date', matches: null })
+  .upgrade(async (tx) => {
+    const old = (await tx.table('matches').toArray()) as LegacyMatch[];
+    const results = old.map(resultFromLegacy).filter((r): r is Result => !!r);
+    await tx.table('results').bulkAdd(results);
+  });
+
 export const uid = () =>
   (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36));
 
 export async function exportData() {
-  const [players, lineups, matches] = await Promise.all([
+  const [players, lineups, results] = await Promise.all([
     db.players.toArray(),
     db.lineups.toArray(),
-    db.matches.toArray(),
+    db.results.toArray(),
   ]);
-  return { app: 'soccer-lineup', version: 1, exportedAt: new Date().toISOString(), players, lineups, matches };
+  return { app: 'soccer-lineup', version: 2, exportedAt: new Date().toISOString(), players, lineups, results };
 }
 
 export async function importData(data: unknown) {
-  const d = data as { app?: string; players?: Player[]; lineups?: LineupTemplate[]; matches?: Match[] };
+  const d = data as { app?: string; players?: Player[]; lineups?: LineupTemplate[]; results?: Result[]; matches?: LegacyMatch[] };
   if (d?.app !== 'soccer-lineup' || !Array.isArray(d.players)) {
     throw new Error('This file is not a Soccer Line-up backup.');
   }
-  await db.transaction('rw', db.players, db.lineups, db.matches, async () => {
-    await Promise.all([db.players.clear(), db.lineups.clear(), db.matches.clear()]);
+  // Backups from the live-tracking version hold matches instead of results.
+  const results = d.results ?? (d.matches ?? []).map(resultFromLegacy).filter((r): r is Result => !!r);
+  await db.transaction('rw', db.players, db.lineups, db.results, async () => {
+    await Promise.all([db.players.clear(), db.lineups.clear(), db.results.clear()]);
     await db.players.bulkAdd(d.players ?? []);
     await db.lineups.bulkAdd(d.lineups ?? []);
-    await db.matches.bulkAdd(d.matches ?? []);
+    await db.results.bulkAdd(results);
   });
 }
