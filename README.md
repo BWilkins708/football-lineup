@@ -1,13 +1,13 @@
 # Soccer Line-up & Stats
 
-A phone-first web app for coaches to build line-ups, track matches live from the sideline and keep season stats for every player. It installs to the home screen like a native app and works fully offline.
+A phone-first web app for coaches to build line-ups, record results and keep goals and assists for every player. It installs to the home screen like a native app and works fully offline.
 
 ## Features
 
 - **Squad**: players with shirt number, positions, strong foot and notes
-- **Line-ups**: 8 formations (4-4-2, 4-3-3, 4-2-3-1, 4-1-4-1, 3-5-2, 3-4-3, 5-3-2, 5-4-1), tap-to-pick positions, captain, bench, auto-fill, saved line-ups
-- **Live match**: match clock with halves, goals with assists and penalties, shots, cards (second yellow becomes a red), injuries, substitutions, undo, live minutes played
-- **Reports and stats**: match report, results record, per-player season stats and match log, sortable season table
+- **Line-ups**: 5, 6, 7, 9 and 11-a-side with formations for each, tap-to-pick positions, captain, bench, auto-fill, saved line-ups
+- **Results**: record each game's score, who scored and who assisted
+- **Stats**: win/draw/loss record, top scorer and assists, per-player goals and assists by match
 - **Backup**: data lives on the device (IndexedDB); download and restore a JSON backup
 
 ## Use it

@@ -1,153 +1,204 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { db, uid, type Match } from '../db';
-import { Modal, TeamSizePicker } from '../components';
-import { FORMATIONS_BY_SIZE, sizeOf, type TeamSize } from '../formations';
-import { score } from '../stats';
-
-/** Typical half length for each team size, used as the default for a new match. */
-const DEFAULT_HALF: Record<TeamSize, number> = { 5: 20, 6: 20, 7: 25, 9: 30, 11: 45 };
+import { useEffect, useState, type ReactNode } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { db, uid, type Goal, type Player, type Result } from '../db';
+import { outcome, record, scorerSummary } from '../stats';
 
 // en-CA formats as yyyy-mm-dd in the device's local time zone.
 const today = () => new Date().toLocaleDateString('en-CA');
 
-export function MatchesPage() {
-  const matches = useLiveQuery(() => db.matches.orderBy('date').reverse().toArray(), []);
-  const [creating, setCreating] = useState(false);
-  if (!matches) return null;
+const formatDate = (d: string) =>
+  new Date(d + 'T12:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 
-  const live = matches.filter((m) => m.status !== 'setup' && m.status !== 'finished');
-  const upcoming = matches.filter((m) => m.status === 'setup').reverse();
-  const played = matches.filter((m) => m.status === 'finished');
-  const record = played.reduce(
-    (r, m) => {
-      const s = score(m);
-      if (s.us > s.them) r.w++; else if (s.us < s.them) r.l++; else r.d++;
-      r.gf += s.us; r.ga += s.them;
-      return r;
-    },
-    { w: 0, d: 0, l: 0, gf: 0, ga: 0 },
-  );
+export function MatchesPage() {
+  const results = useLiveQuery(() => db.results.orderBy('date').reverse().toArray(), []);
+  const players = useLiveQuery(() => db.players.toArray(), []);
+  if (!results || !players) return null;
+  const byId = new Map(players.map((p) => [p.id, p]));
+  const rec = record(results);
 
   return (
     <div className="page">
       <div className="page-head">
-        <h1>Matches</h1>
-        <button className="btn primary" onClick={() => setCreating(true)}>New match</button>
+        <h1>Results</h1>
+        <Link className="btn primary" to="/results/new">Add result</Link>
       </div>
-      {played.length > 0 && (
+      {results.length > 0 && (
         <p className="record">
-          <b>{record.w}</b>W <b>{record.d}</b>D <b>{record.l}</b>L · Goals {record.gf}–{record.ga}
+          <b>{rec.W}</b>W <b>{rec.D}</b>D <b>{rec.L}</b>L · Goals {rec.gf}–{rec.ga}
         </p>
       )}
-      {matches.length === 0 && <div className="empty-state"><p>No matches yet. Create one to pick your line-up and track it live.</p></div>}
-      <MatchGroup title="Live" matches={live} />
-      <MatchGroup title="Upcoming" matches={upcoming} />
-      <MatchGroup title="Results" matches={played} />
-      {creating && (
-        <NewMatchForm
-          // Default to the team size of the most recently created match.
-          defaultSize={matches.length ? sizeOf([...matches].sort((a, b) => b.createdAt - a.createdAt)[0].lineup.formation) : 11}
-          onClose={() => setCreating(false)}
-        />
+      {results.length === 0 ? (
+        <div className="empty-state"><p>No results yet. Add one after each game with the score, scorers and assists.</p></div>
+      ) : (
+        <ul className="card-list">
+          {results.map((r) => {
+            const res = outcome(r);
+            const scorers = scorerSummary(r, byId);
+            return (
+              <li key={r.id}>
+                <Link to={`/results/${r.id}`} className="card-row">
+                  <span className="grow">
+                    <b>{r.venue === 'Home' ? 'v' : '@'} {r.opponent}</b>
+                    <span className="muted small block">{formatDate(r.date)}{r.competition ? ` · ${r.competition}` : ''}</span>
+                    {scorers && <span className="small block">⚽ {scorers}</span>}
+                  </span>
+                  <span className="score-pill"><span className={`res ${res}`}>{res}</span> {r.goalsFor}–{r.goalsAgainst}</span>
+                  <span className="chev">›</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );
 }
 
-function MatchGroup({ title, matches }: { title: string; matches: Match[] }) {
-  if (!matches.length) return null;
+function Stepper({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
   return (
-    <section>
-      <h3 className="group-title">{title}</h3>
-      <ul className="card-list">
-        {matches.map((m) => {
-          const s = score(m);
-          const res = m.status === 'finished' ? (s.us > s.them ? 'W' : s.us < s.them ? 'L' : 'D') : null;
-          return (
-            <li key={m.id}>
-              <Link to={`/matches/${m.id}`} className="card-row">
-                <span className="grow">
-                  <b>{m.venue === 'Home' ? 'v' : '@'} {m.opponent}</b>
-                  <span className="muted small block">{new Date(m.date + 'T12:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}{m.competition ? ` · ${m.competition}` : ''}{sizeOf(m.lineup.formation) !== 11 ? ` · ${sizeOf(m.lineup.formation)}-a-side` : ''}</span>
-                </span>
-                {m.status === 'setup' ? <span className="muted small">Set up</span> : (
-                  <span className="score-pill">{res && <span className={`res ${res}`}>{res}</span>} {s.us}–{s.them}{res ? '' : ' · live'}</span>
-                )}
-                <span className="chev">›</span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+    <div className="stepper">
+      <span className="muted small">{label}</span>
+      <div className="row">
+        <button type="button" className="btn" onClick={() => onChange(Math.max(0, value - 1))} aria-label={`${label} minus one`}>−</button>
+        <b className="stepper-value">{value}</b>
+        <button type="button" className="btn" onClick={() => onChange(value + 1)} aria-label={`${label} plus one`}>+</button>
+      </div>
+    </div>
   );
 }
 
-function NewMatchForm({ defaultSize, onClose }: { defaultSize: TeamSize; onClose: () => void }) {
+const OWN_GOAL = '__own_goal__';
+
+export function ResultPage() {
+  const { id } = useParams();
+  // Remount per result so the form never carries over another result's draft.
+  return <ResultForm key={id} id={id!} />;
+}
+
+function ResultForm({ id }: { id: string }) {
+  const isNew = id === 'new';
   const navigate = useNavigate();
-  const lineups = useLiveQuery(() => db.lineups.orderBy('updatedAt').reverse().toArray(), []);
-  const [opponent, setOpponent] = useState('');
-  const [date, setDate] = useState(today());
-  const [venue, setVenue] = useState<'Home' | 'Away'>('Home');
-  const [competition, setCompetition] = useState('');
-  const [size, setSize] = useState<TeamSize>(defaultSize);
-  const [halfLength, setHalfLength] = useState(DEFAULT_HALF[defaultSize]);
-  const [template, setTemplate] = useState('');
+  // null once loaded when there is no saved result; undefined while loading.
+  const existing = useLiveQuery(async () => (isNew ? null : (await db.results.get(id)) ?? null), [id, isNew]);
+  const players = useLiveQuery(() => db.players.toArray(), []);
+  const [draft, setDraft] = useState<Result | undefined>();
 
-  const sizedLineups = lineups?.filter((l) => sizeOf(l.formation) === size) ?? [];
+  useEffect(() => {
+    if (draft) return;
+    if (isNew) {
+      setDraft({ id: uid(), opponent: '', date: today(), venue: 'Home', goalsFor: 0, goalsAgainst: 0, goals: [], createdAt: Date.now() });
+    } else if (existing) {
+      setDraft(existing);
+    }
+  }, [isNew, existing, draft]);
 
-  const changeSize = (n: TeamSize) => {
-    setSize(n);
-    setHalfLength(DEFAULT_HALF[n]);
-    setTemplate('');
+  if (!players || (!isNew && existing === undefined)) return null;
+  if (!isNew && !existing) return <div className="page"><p>Result not found.</p></div>;
+  if (!draft) return null;
+
+  const squad = players
+    .filter((p) => p.active || draft.goals.some((g) => g.scorerId === p.id || g.assistId === p.id))
+    .sort((a, b) => (a.number ?? 999) - (b.number ?? 999));
+  const set = (patch: Partial<Result>) => setDraft({ ...draft, ...patch });
+
+  const setGoalsFor = (n: number) => {
+    const goals = draft.goals.slice(0, n);
+    while (goals.length < n) goals.push({});
+    set({ goalsFor: n, goals });
+  };
+
+  const setGoal = (i: number, patch: Goal) => {
+    const goals = draft.goals.map((g, j) => (j === i ? { ...g, ...patch } : g));
+    set({ goals });
   };
 
   const save = async () => {
-    const t = sizedLineups.find((l) => l.id === template);
-    const id = uid();
-    await db.matches.add({
-      id,
-      opponent: opponent.trim(),
-      date,
-      venue,
-      competition: competition.trim() || undefined,
-      halfLength,
-      lineup: t ? { formation: t.formation, slots: { ...t.slots }, bench: [...t.bench], captainId: t.captainId } : { formation: FORMATIONS_BY_SIZE[size][0], slots: {}, bench: [] },
-      status: 'setup',
-      clock: { running: false, elapsedBefore: 0 },
-      events: [],
-      createdAt: Date.now(),
-    });
-    navigate(`/matches/${id}`);
+    await db.results.put({ ...draft, opponent: draft.opponent.trim(), competition: draft.competition?.trim() || undefined });
+    navigate('/matches');
+  };
+
+  const remove = async () => {
+    if (!confirm('Delete this result?')) return;
+    await db.results.delete(draft.id);
+    navigate('/matches');
   };
 
   return (
-    <Modal title="New match" onClose={onClose}>
-      <form className="form" onSubmit={(e) => { e.preventDefault(); if (opponent.trim()) save(); }}>
-        <label className="field"><span>Opponent</span><input autoFocus value={opponent} onChange={(e) => setOpponent(e.target.value)} /></label>
-        <label className="field"><span>Date</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-        <div className="field">
-          <span>Venue</span>
-          <div className="toggle-group">
-            {(['Home', 'Away'] as const).map((v) => <button type="button" key={v} className={venue === v ? 'on' : ''} onClick={() => setVenue(v)}>{v}</button>)}
+    <div className="page">
+      <Link to="/matches" className="back">‹ Results</Link>
+      <h1>{isNew ? 'Add result' : 'Edit result'}</h1>
+      <form className="form" onSubmit={(e) => { e.preventDefault(); if (draft.opponent.trim()) save(); }}>
+        <label className="field"><span>Opponent</span><input autoFocus={isNew} value={draft.opponent} onChange={(e) => set({ opponent: e.target.value })} /></label>
+        <div className="row gap">
+          <label className="field grow"><span>Date</span><input type="date" value={draft.date} onChange={(e) => set({ date: e.target.value })} /></label>
+          <div className="field">
+            <span>Venue</span>
+            <div className="toggle-group">
+              {(['Home', 'Away'] as const).map((v) => <button type="button" key={v} className={draft.venue === v ? 'on' : ''} onClick={() => set({ venue: v })}>{v}</button>)}
+            </div>
           </div>
         </div>
-        <label className="field"><span>Competition (optional)</span><input value={competition} onChange={(e) => setCompetition(e.target.value)} placeholder="League, Cup, Friendly…" /></label>
-        <TeamSizePicker value={size} onChange={changeSize} />
-        <label className="field"><span>Half length (minutes)</span><input type="number" inputMode="numeric" min={5} max={60} value={halfLength} onChange={(e) => setHalfLength(Number(e.target.value) || DEFAULT_HALF[size])} /></label>
-        {!!sizedLineups.length && (
-          <label className="field">
-            <span>Start from saved line-up</span>
-            <select value={template} onChange={(e) => setTemplate(e.target.value)}>
-              <option value="">None</option>
-              {sizedLineups.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.formation})</option>)}
-            </select>
-          </label>
+        <label className="field"><span>Competition (optional)</span><input value={draft.competition ?? ''} onChange={(e) => set({ competition: e.target.value })} placeholder="League, Cup, Friendly…" /></label>
+
+        <div className="score-entry">
+          <Stepper label="Us" value={draft.goalsFor} onChange={setGoalsFor} />
+          <span className="score-dash">–</span>
+          <Stepper label={draft.opponent.trim() || 'Them'} value={draft.goalsAgainst} onChange={(n) => set({ goalsAgainst: n })} />
+        </div>
+
+        {draft.goalsFor > 0 && (
+          <section>
+            <h3>Our goals</h3>
+            <ol className="goal-list">
+              {draft.goals.map((g, i) => (
+                <li key={i}>
+                  <span className="num">{i + 1}</span>
+                  <label className="field grow">
+                    <span>Scorer</span>
+                    <PlayerSelect
+                      players={squad}
+                      value={g.ownGoal ? OWN_GOAL : g.scorerId ?? ''}
+                      onChange={(v) => setGoal(i, v === OWN_GOAL ? { ownGoal: true, scorerId: undefined } : { ownGoal: undefined, scorerId: v || undefined })}
+                      empty="Not sure"
+                      extra={<option value={OWN_GOAL}>Opponent own goal</option>}
+                    />
+                  </label>
+                  <label className="field grow">
+                    <span>Assist</span>
+                    <PlayerSelect
+                      players={squad.filter((p) => p.id !== g.scorerId)}
+                      value={g.assistId ?? ''}
+                      onChange={(v) => setGoal(i, { assistId: v || undefined })}
+                      empty="No assist"
+                    />
+                  </label>
+                </li>
+              ))}
+            </ol>
+            {squad.length === 0 && <p className="muted small">Add players to your <Link to="/">squad</Link> to record scorers.</p>}
+          </section>
         )}
-        <button className="btn primary block" disabled={!opponent.trim()}>Create match</button>
+
+        <button className="btn primary block" disabled={!draft.opponent.trim()}>Save result</button>
       </form>
-    </Modal>
+      {!isNew && <button className="btn ghost danger" onClick={remove}>Delete result</button>}
+    </div>
+  );
+}
+
+function PlayerSelect({ players, value, onChange, empty, extra }: {
+  players: Player[];
+  value: string;
+  onChange: (id: string) => void;
+  empty: string;
+  extra?: ReactNode;
+}) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">{empty}</option>
+      {players.map((p) => <option key={p.id} value={p.id}>{p.number != null ? `${p.number}. ` : ''}{p.name}</option>)}
+      {extra}
+    </select>
   );
 }

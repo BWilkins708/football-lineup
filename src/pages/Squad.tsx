@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db, uid, type Foot, type Player, type Position } from '../db';
 import { Modal } from '../components';
-import { formatMinute, matchPlayerStats, mins, score, seasonStats } from '../stats';
+import { outcome, seasonStats } from '../stats';
 
 const POSITIONS: Position[] = ['GK', 'DEF', 'MID', 'FWD'];
 
@@ -138,21 +138,23 @@ export function PlayerPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const player = useLiveQuery(() => db.players.get(id!), [id]);
-  const matches = useLiveQuery(() => db.matches.orderBy('date').reverse().toArray(), []);
+  const results = useLiveQuery(() => db.results.orderBy('date').reverse().toArray(), []);
   const [editing, setEditing] = useState(false);
-  if (player === undefined || !matches) return null;
+  if (player === undefined || !results) return null;
   if (!player) return <div className="page"><p>Player not found.</p></div>;
 
-  const season = seasonStats([player], matches).get(player.id)!;
-  const log = matches
-    .filter((m) => m.status !== 'setup')
-    .map((m) => ({ m, s: matchPlayerStats(m).get(player.id) }))
-    .filter((r) => r.s?.appeared);
+  const season = seasonStats([player], results).get(player.id)!;
+  const log = results
+    .map((r) => ({
+      r,
+      goals: r.goals.filter((g) => g.scorerId === player.id && !g.ownGoal).length,
+      assists: r.goals.filter((g) => g.assistId === player.id).length,
+    }))
+    .filter((row) => row.goals || row.assists);
 
   const remove = async () => {
-    const used = matches.some((m) => matchPlayerStats(m).has(player.id));
-    if (used) {
-      if (confirm(`${player.name} has match history. Mark them inactive instead of deleting?`)) {
+    if (log.length) {
+      if (confirm(`${player.name} has goals or assists recorded. Mark them inactive instead of deleting?`)) {
         await db.players.update(player.id, { active: false });
       }
       return;
@@ -163,18 +165,11 @@ export function PlayerPage() {
     }
   };
 
-  const tiles: [string, number | string][] = [
-    ['Apps', season.apps],
-    ['Starts', season.starts],
-    ['Minutes', mins(season.seconds)],
+  const tiles: [string, number][] = [
     ['Goals', season.goals],
     ['Assists', season.assists],
-    ['Shots', season.shots],
-    ['On target', season.shotsOnTarget],
-    ['Yellows', season.yellows],
-    ['Reds', season.reds],
+    ['Goals + assists', season.goals + season.assists],
   ];
-  if (player.positions.includes('GK') || player.positions.includes('DEF')) tiles.push(['Clean sheets', season.cleanSheets]);
 
   return (
     <div className="page">
@@ -195,51 +190,30 @@ export function PlayerPage() {
           <div className="tile" key={label}><b>{v}</b><span>{label}</span></div>
         ))}
       </div>
-      {season.apps > 0 && (
-        <p className="muted small">
-          {(season.goals + season.assists) > 0 ? `${Math.round(mins(season.seconds) / (season.goals + season.assists))} minutes per goal or assist. ` : ''}
-          Average {Math.round(mins(season.seconds) / season.apps)} minutes per appearance.
-        </p>
-      )}
 
-      <h3>Match log</h3>
-      {log.length === 0 ? <p className="muted">No appearances yet.</p> : (
+      <h3>Goals and assists by match</h3>
+      {log.length === 0 ? <p className="muted">None recorded yet.</p> : (
         <table className="table">
-          <thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>Min</th><th>G</th><th>A</th></tr></thead>
+          <thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th>G</th><th>A</th></tr></thead>
           <tbody>
-            {log.map(({ m, s }) => {
-              const sc = score(m);
-              const res = sc.us > sc.them ? 'W' : sc.us < sc.them ? 'L' : 'D';
+            {log.map(({ r, goals, assists }) => {
+              const res = outcome(r);
               return (
-                <tr key={m.id} onClick={() => navigate(`/matches/${m.id}`)} className="clickable">
-                  <td>{m.date.slice(5)}</td>
-                  <td>{m.opponent}{s!.started ? '' : ' (sub)'}</td>
-                  <td><span className={`res ${res}`}>{res}</span> {sc.us}–{sc.them}</td>
-                  <td>{mins(s!.seconds)}</td>
-                  <td>{s!.goals || ''}</td>
-                  <td>{s!.assists || ''}</td>
+                <tr key={r.id} onClick={() => navigate(`/results/${r.id}`)} className="clickable">
+                  <td>{r.date.slice(5)}</td>
+                  <td>{r.opponent}</td>
+                  <td><span className={`res ${res}`}>{res}</span> {r.goalsFor}–{r.goalsAgainst}</td>
+                  <td>{goals || ''}</td>
+                  <td>{assists || ''}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       )}
-      {log.length > 0 && <GoalList playerId={player.id} matches={log.map((r) => r.m)} />}
 
       <button className="btn ghost danger" onClick={remove}>Delete player</button>
       {editing && <PlayerForm player={player} onClose={() => setEditing(false)} />}
     </div>
-  );
-}
-
-function GoalList({ playerId, matches }: { playerId: string; matches: import('../db').Match[] }) {
-  const goals = matches.flatMap((m) =>
-    m.events.filter((e) => e.type === 'goal' && e.playerId === playerId && !e.ownGoal).map((e) => ({ m, e })),
-  );
-  if (!goals.length) return null;
-  return (
-    <p className="muted small">
-      Goals: {goals.map(({ m, e }) => `${formatMinute(m, e)} v ${m.opponent}${e.penalty ? ' (pen)' : ''}`).join(', ')}
-    </p>
   );
 }
