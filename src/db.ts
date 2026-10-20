@@ -6,6 +6,8 @@ export type Foot = 'Left' | 'Right' | 'Both';
 export interface Team {
   id: string;
   name: string;
+  /** Month the season starts, 1 = January. Missing means August. */
+  seasonStartMonth?: number;
   createdAt: number;
 }
 
@@ -14,6 +16,7 @@ export interface Player {
   teamId: string;
   name: string;
   number?: number;
+  /** Main position first. Can be empty when the coach hasn't set one yet. */
   positions: Position[];
   foot?: Foot;
   notes?: string;
@@ -56,7 +59,10 @@ export interface Result {
   goalsAgainst: number;
   /** One entry per goal we scored. */
   goals: Goal[];
+  /** Players who played. Missing on results saved before this was recorded. */
+  playedIds?: string[];
   createdAt: number;
+  updatedAt?: number;
 }
 
 /** Shape of matches saved by the earlier live-tracking version, kept so they can be converted. */
@@ -151,16 +157,27 @@ export async function exportData() {
 
 type Teamless<T> = Omit<T, 'teamId'> & { teamId?: string };
 
-export async function importData(data: unknown) {
+export interface Backup {
+  exportedAt?: string;
+  teams: Team[];
+  players: Player[];
+  lineups: LineupTemplate[];
+  results: Result[];
+}
+
+/** Checks a backup file and converts older formats, so it can be previewed before restoring. */
+export function parseBackup(data: unknown): Backup {
   const d = data as {
     app?: string;
+    exportedAt?: string;
     teams?: Team[];
     players?: Teamless<Player>[];
     lineups?: Teamless<LineupTemplate>[];
     results?: Teamless<Result>[];
     matches?: LegacyMatch[];
   };
-  if (d?.app !== 'soccer-lineup' || !Array.isArray(d.players)) {
+  const isList = (v: unknown) => v === undefined || Array.isArray(v);
+  if (d?.app !== 'soccer-lineup' || !Array.isArray(d.players) || ![d.teams, d.lineups, d.results, d.matches].every(isList)) {
     throw new Error('This file is not a Soccer Line-up backup.');
   }
   // Backups from before teams existed go into a single team.
@@ -168,12 +185,33 @@ export async function importData(data: unknown) {
   const withTeam = <T,>(rows: Teamless<T>[]) => rows.map((r) => ({ ...r, teamId: r.teamId ?? teams[0].id }) as T);
   // Backups from the live-tracking version hold matches instead of results.
   const results = d.results ?? (d.matches ?? []).map(resultFromLegacy).filter((r): r is TeamlessResult => !!r);
+  return {
+    exportedAt: d.exportedAt,
+    teams,
+    players: withTeam<Player>(d.players),
+    lineups: withTeam<LineupTemplate>(d.lineups ?? []),
+    results: withTeam<Result>(results),
+  };
+}
+
+/**
+ * Restores a backup. "merge" adds the chosen teams from the backup and keeps everything else on the device
+ * (items in both are replaced by the backup's copy). "replace" wipes the device and loads the whole backup.
+ * Returns the id of a restored team to switch to.
+ */
+export async function restoreBackup(backup: Backup, mode: 'merge' | 'replace', teamIds = backup.teams.map((t) => t.id)) {
+  const keep = new Set(mode === 'replace' ? backup.teams.map((t) => t.id) : teamIds);
+  const pick = <T extends { teamId: string }>(rows: T[]) => rows.filter((r) => keep.has(r.teamId));
+  const teams = backup.teams.filter((t) => keep.has(t.id));
+  if (!teams.length) throw new Error('Choose at least one team to restore.');
   await db.transaction('rw', [db.teams, db.players, db.lineups, db.results], async () => {
-    await Promise.all([db.teams.clear(), db.players.clear(), db.lineups.clear(), db.results.clear()]);
-    await db.teams.bulkAdd(teams);
-    await db.players.bulkAdd(withTeam<Player>(d.players ?? []));
-    await db.lineups.bulkAdd(withTeam<LineupTemplate>(d.lineups ?? []));
-    await db.results.bulkAdd(withTeam<Result>(results));
+    if (mode === 'replace') {
+      await Promise.all([db.teams.clear(), db.players.clear(), db.lineups.clear(), db.results.clear()]);
+    }
+    await db.teams.bulkPut(teams);
+    await db.players.bulkPut(pick(backup.players));
+    await db.lineups.bulkPut(pick(backup.lineups));
+    await db.results.bulkPut(pick(backup.results));
   });
   return teams[0].id;
 }

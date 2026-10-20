@@ -3,7 +3,7 @@ import { PlayerPage, SquadPage } from './pages/Squad';
 import { LineupEditPage, LineupsPage } from './pages/Lineups';
 import { MatchesPage, ResultPage } from './pages/Matches';
 import { StatsPage } from './pages/Stats';
-import { TeamBar, TeamProvider, useTeam } from './team';
+import { BackupReminder, TeamBar, TeamProvider, useTeam } from './team';
 
 const icon = (d: string) => (
   <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -33,6 +33,7 @@ function Shell() {
   return (
     <div className="app">
       <TeamBar />
+      <BackupReminder />
       {/* Remount pages on team switch so no page keeps another team's data. */}
       <main key={team.id}>
         <Routes>

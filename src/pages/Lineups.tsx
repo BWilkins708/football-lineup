@@ -5,6 +5,7 @@ import { db, uid, type LineupTemplate } from '../db';
 import { LineupEditor } from '../components';
 import { sizeOf } from '../formations';
 import { useTeam } from '../team';
+import { lineupImage, shareFile, slug } from '../share';
 
 export function LineupsPage() {
   const { team } = useTeam();
@@ -17,7 +18,10 @@ export function LineupsPage() {
 
   const create = async () => {
     const id = uid();
-    await db.lineups.add({ id, teamId: team.id, name: 'New line-up', formation: '4-4-2', slots: {}, bench: [], updatedAt: Date.now() });
+    // Start from the last line-up's formation so the team size carries over.
+    const formation = lineups[0]?.formation ?? '4-4-2';
+    const name = `Line-up ${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`;
+    await db.lineups.add({ id, teamId: team.id, name, formation, slots: {}, bench: [], updatedAt: Date.now() });
     navigate(`/lineups/${id}`);
   };
 
@@ -67,6 +71,15 @@ export function LineupEditPage() {
     db.lineups.put(next);
   };
 
+  const share = async () => {
+    try {
+      const png = await lineupImage(draft, players, team.name, draft.name);
+      await shareFile(png, `${slug(draft.name)}.png`, draft.name);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not share the line-up.');
+    }
+  };
+
   const remove = async () => {
     if (!confirm(`Delete "${draft.name}"?`)) return;
     await db.lineups.delete(draft.id);
@@ -86,6 +99,12 @@ export function LineupEditPage() {
         <LineupEditor lineup={draft} players={players} onChange={(l) => update({ ...draft, ...l })} />
       )}
       <p className="muted small">Changes save automatically.</p>
+      {players.length > 0 && (
+        <div className="row gap">
+          <button className="btn grow" onClick={share}>Share as picture</button>
+          <Link className="btn primary grow" to={`/results/new?lineup=${draft.id}`}>Add result</Link>
+        </div>
+      )}
       <button className="btn ghost danger" onClick={remove}>Delete line-up</button>
     </div>
   );
