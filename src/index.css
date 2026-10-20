@@ -337,3 +337,25 @@ select {
 
 .card-list .list-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 6px; }
 .lineup-editor { margin-top: 14px; }
+
+/* Backup reminder */
+.banner {
+  display: flex; align-items: center; gap: 10px; margin: 12px 16px 0; padding: 10px 6px 10px 14px;
+  background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: var(--radius);
+}
+.icon-btn.on-dark { color: #fff; }
+.icon-btn.on-dark:hover { background: rgba(255, 255, 255, 0.15); }
+
+/* Who played */
+.played-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.played-chip {
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted); border-radius: 999px;
+  padding: 8px 12px; min-height: 40px; font-size: 0.9rem; cursor: pointer; transition: background 0.15s, color 0.15s;
+}
+.played-chip b { margin-right: 2px; }
+.played-chip.on { background: var(--accent-soft); color: var(--text); border-color: var(--accent); font-weight: 600; }
+.section-head .row .btn { margin: 0; }
+.season-picker { margin: 4px 0 8px; }
+.center-row { justify-content: center; flex-wrap: wrap; }
+.tick { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; border: 2px solid var(--border); color: var(--accent); font-weight: 800; flex: none; }
+.picked .tick { border-color: var(--accent); }

@@ -1,24 +1,23 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { db, uid, type Goal, type Player, type Result } from '../db';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { db, uid, type Goal, type LineupTemplate, type Player, type Result } from '../db';
+import { inSeason, today } from '../seasons';
 import { outcome, record, scorerSummary } from '../stats';
-import { useTeam } from '../team';
-
-// en-CA formats as yyyy-mm-dd in the device's local time zone.
-const today = () => new Date().toLocaleDateString('en-CA');
+import { SeasonPicker, useTeam } from '../team';
 
 const formatDate = (d: string) =>
   new Date(d + 'T12:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 
 export function MatchesPage() {
-  const { team } = useTeam();
-  const results = useLiveQuery(
+  const { team, season, startMonth } = useTeam();
+  const allResults = useLiveQuery(
     () => db.results.where('teamId').equals(team.id).sortBy('date').then((r) => r.reverse()),
     [team.id],
   );
   const players = useLiveQuery(() => db.players.where('teamId').equals(team.id).toArray(), [team.id]);
-  if (!results || !players) return null;
+  if (!allResults || !players) return null;
+  const results = inSeason(allResults, season, startMonth);
   const byId = new Map(players.map((p) => [p.id, p]));
   const rec = record(results);
 
@@ -28,13 +27,14 @@ export function MatchesPage() {
         <h1>Results</h1>
         <Link className="btn primary" to="/results/new">Add result</Link>
       </div>
+      <SeasonPicker />
       {results.length > 0 && (
         <p className="record">
-          <b>{rec.W}</b>W <b>{rec.D}</b>D <b>{rec.L}</b>L · Goals {rec.gf}–{rec.ga}
+          <b>{rec.W}</b>W <b>{rec.D}</b>D <b>{rec.L}</b>L · Goals {rec.gf}–{rec.ga}{rec.cleanSheets ? ` · ${rec.cleanSheets} clean sheet${rec.cleanSheets === 1 ? '' : 's'}` : ''}
         </p>
       )}
       {results.length === 0 ? (
-        <div className="empty-state"><p>No results yet. Add one after each game with the score, scorers and assists.</p></div>
+        <div className="empty-state"><p>{allResults.length ? 'No results this season yet.' : 'No results yet. Add one after each game with the score, who played and who scored.'}</p></div>
       ) : (
         <ul className="card-list">
           {results.map((r) => {
@@ -87,26 +87,40 @@ function ResultForm({ id }: { id: string }) {
   // null once loaded when there is no saved result; undefined while loading.
   const existing = useLiveQuery(async () => (isNew ? null : (await db.results.get(id)) ?? null), [id, isNew]);
   const { team } = useTeam();
+  const [params] = useSearchParams();
+  const fromLineup = params.get('lineup');
   const players = useLiveQuery(() => db.players.where('teamId').equals(team.id).toArray(), [team.id]);
+  const lineups = useLiveQuery(
+    () => db.lineups.where('teamId').equals(team.id).sortBy('updatedAt').then((l) => l.reverse()),
+    [team.id],
+  );
   const [draft, setDraft] = useState<Result | undefined>();
 
   useEffect(() => {
-    if (draft) return;
+    if (draft || !players || !lineups) return;
     if (isNew) {
-      setDraft({ id: uid(), teamId: team.id, opponent: '', date: today(), venue: 'Home', goalsFor: 0, goalsAgainst: 0, goals: [], createdAt: Date.now() });
+      // Start with the line-up the coach came from, otherwise everyone in the squad.
+      const lineup = lineups.find((l) => l.id === fromLineup);
+      const playedIds = lineup ? lineupPlayers(lineup, players) : players.filter((p) => p.active).map((p) => p.id);
+      setDraft({ id: uid(), teamId: team.id, opponent: '', date: today(), venue: 'Home', goalsFor: 0, goalsAgainst: 0, goals: [], playedIds, createdAt: Date.now() });
     } else if (existing) {
       setDraft(existing);
     }
-  }, [isNew, existing, draft, team.id]);
+  }, [isNew, existing, draft, team.id, players, lineups, fromLineup]);
 
-  if (!players || (!isNew && existing === undefined)) return null;
+  if (!players || !lineups || (!isNew && existing === undefined)) return null;
   if (!isNew && !existing) return <div className="page"><p>Result not found.</p></div>;
   if (!draft) return null;
 
+  const played = new Set(draft.playedIds ?? []);
   const squad = players
-    .filter((p) => p.active || draft.goals.some((g) => g.scorerId === p.id || g.assistId === p.id))
+    .filter((p) => p.active || played.has(p.id) || draft.goals.some((g) => g.scorerId === p.id || g.assistId === p.id))
     .sort((a, b) => (a.number ?? 999) - (b.number ?? 999));
+  // Only offer players who played as scorers, once anyone is ticked.
+  const scorers = played.size ? squad.filter((p) => played.has(p.id) || draft.goals.some((g) => g.scorerId === p.id || g.assistId === p.id)) : squad;
   const set = (patch: Partial<Result>) => setDraft({ ...draft, ...patch });
+  const setPlayed = (ids: string[]) => set({ playedIds: ids });
+  const togglePlayed = (id: string) => setPlayed(played.has(id) ? [...played].filter((x) => x !== id) : [...played, id]);
 
   const setGoalsFor = (n: number) => {
     const goals = draft.goals.slice(0, n);
@@ -120,7 +134,7 @@ function ResultForm({ id }: { id: string }) {
   };
 
   const save = async () => {
-    await db.results.put({ ...draft, opponent: draft.opponent.trim(), competition: draft.competition?.trim() || undefined });
+    await db.results.put({ ...draft, opponent: draft.opponent.trim(), competition: draft.competition?.trim() || undefined, updatedAt: Date.now() });
     navigate('/matches');
   };
 
@@ -153,6 +167,36 @@ function ResultForm({ id }: { id: string }) {
           <Stepper label={draft.opponent.trim() || 'Them'} value={draft.goalsAgainst} onChange={(n) => set({ goalsAgainst: n })} />
         </div>
 
+        <section>
+          <div className="section-head">
+            <h3>Who played ({played.size})</h3>
+            <div className="row">
+              <button type="button" className="btn ghost small-btn" onClick={() => setPlayed(squad.filter((p) => p.active).map((p) => p.id))}>All</button>
+              <button type="button" className="btn ghost small-btn" onClick={() => setPlayed([])}>None</button>
+            </div>
+          </div>
+          {lineups.length > 0 && (
+            <label className="field inline">
+              <span>Use line-up</span>
+              <select value="" onChange={(e) => { const l = lineups.find((x) => x.id === e.target.value); if (l) setPlayed(lineupPlayers(l, players)); }}>
+                <option value="">Choose…</option>
+                {lineups.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </label>
+          )}
+          {squad.length === 0 ? (
+            <p className="muted small">Add players to your <Link to="/">squad</Link> to record who played.</p>
+          ) : (
+            <div className="played-grid">
+              {squad.map((p) => (
+                <button type="button" key={p.id} className={`played-chip${played.has(p.id) ? ' on' : ''}`} onClick={() => togglePlayed(p.id)} aria-pressed={played.has(p.id)}>
+                  <b>{p.number ?? '–'}</b> {p.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
         {draft.goalsFor > 0 && (
           <section>
             <h3>Our goals</h3>
@@ -163,7 +207,7 @@ function ResultForm({ id }: { id: string }) {
                   <label className="field grow">
                     <span>Scorer</span>
                     <PlayerSelect
-                      players={squad}
+                      players={scorers}
                       value={g.ownGoal ? OWN_GOAL : g.scorerId ?? ''}
                       onChange={(v) => setGoal(i, v === OWN_GOAL ? { ownGoal: true, scorerId: undefined } : { ownGoal: undefined, scorerId: v || undefined })}
                       empty="Not sure"
@@ -173,7 +217,7 @@ function ResultForm({ id }: { id: string }) {
                   <label className="field grow">
                     <span>Assist</span>
                     <PlayerSelect
-                      players={squad.filter((p) => p.id !== g.scorerId)}
+                      players={scorers.filter((p) => p.id !== g.scorerId)}
                       value={g.assistId ?? ''}
                       onChange={(v) => setGoal(i, { assistId: v || undefined })}
                       empty="No assist"
@@ -182,7 +226,6 @@ function ResultForm({ id }: { id: string }) {
                 </li>
               ))}
             </ol>
-            {squad.length === 0 && <p className="muted small">Add players to your <Link to="/">squad</Link> to record scorers.</p>}
           </section>
         )}
 
@@ -192,6 +235,12 @@ function ResultForm({ id }: { id: string }) {
     </div>
   );
 }
+
+/** Starters and subs named in a saved line-up who are still in the squad. */
+const lineupPlayers = (l: LineupTemplate, players: Player[]) => {
+  const ids = new Set([...Object.values(l.slots), ...l.bench]);
+  return players.filter((p) => ids.has(p.id)).map((p) => p.id);
+};
 
 function PlayerSelect({ players, value, onChange, empty, extra }: {
   players: Player[];
